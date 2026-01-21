@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Doom School Demo</title>
+<style>
+body{margin:0;overflow:hidden;background:black}
+#ui{
+position:fixed;top:10px;left:10px;
+color:white;font-family:monospace;
+background:rgba(0,0,0,.6);padding:10px
+}
+#cross{
+position:fixed;left:50%;top:50%;
+width:8px;height:8px;margin:-4px;
+border:1px solid red
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cross"></div>
+<div id="ui">
+HP:<span id="hp"></span><br>
+Ammo:<span id="ammo"></span><br>
+Wave:<span id="wave"></span><br>
+Time:<span id="time"></span><br>
+Mode:<span id="mode"></span>
+</div>
+
+<script>
+// ===== GAME CODE START =====
+const c=document.getElementById("c"),ctx=c.getContext("2d");
+c.width=innerWidth;c.height=innerHeight;
+
+let player={x:0,y:0,a:0,hp:100,ammo:100,inCar:false,car:null};
+let timeOfDay=0,wave=1;
+const CHUNK=16;
+const world={};
+
+function rand(x,y){return Math.abs(Math.sin(x*12.989+y*78.233))*43758%1;}
+function getTile(x,y){
+  let cx=Math.floor(x/CHUNK),cy=Math.floor(y/CHUNK);
+  let key=cx+","+cy;
+  if(!world[key]){
+    let chunk=[];
+    for(let j=0;j<CHUNK;j++){chunk[j]=[];
+      for(let i=0;i<CHUNK;i++){
+        let v=rand(cx*CHUNK+i,cy*CHUNK+j);
+        chunk[j][i]=v>0.75?1:0;
+      }
+    }
+    world[key]=chunk;
+  }
+  return world[key][(y%CHUNK+CHUNK)%CHUNK][(x%CHUNK+CHUNK)%CHUNK];
+}
+
+// ENTITIES
+let monsters=[],cars=[{x:3,y:3}];
+function spawnWave(){for(let i=0;i<wave*3;i++){
+  monsters.push({x:player.x+Math.random()*10-5,y:player.y+Math.random()*10-5,hp:40});
+}}
+spawnWave();
+
+// INPUT
+let keys={};
+onkeydown=e=>keys[e.key]=1;
+onkeyup=e=>keys[e.key]=0;
+c.onclick=()=>c.requestPointerLock();
+onmousemove=e=>{if(document.pointerLockElement===c)player.a+=e.movementX*0.002;};
+
+// COLLISION
+function free(x,y){return getTile(Math.floor(x),Math.floor(y))===0;}
+
+// DRAW WORLD
+function drawWorld(){
+  for(let i=0;i<c.width;i++){
+    let ra=player.a-0.6+i/c.width*1.2,d=0;
+    while(d<30){
+      d+=0.05;
+      let x=player.x+Math.cos(ra)*d,y=player.y+Math.sin(ra)*d;
+      if(getTile(Math.floor(x),Math.floor(y))){
+        let h=c.height/(d+0.1);
+        let shade=150-d*3,night=Math.sin(timeOfDay)*50;
+        ctx.fillStyle=`rgb(${shade-night},${shade-night},${shade})`;
+        ctx.fillRect(i,c.height/2-h/2,1,h);
+        break;
+      }
+    }
+  }
+}
+function drawSprites(list,color){
+  list.forEach(o=>{
+    let dx=o.x-player.x,dy=o.y-player.y,dist=Math.hypot(dx,dy),ang=Math.atan2(dy,dx)-player.a;
+    if(ang>-0.6&&ang<0.6){
+      let size=c.height/dist;
+      let x=(ang+0.6)/1.2*c.width;
+      ctx.fillStyle=color;
+      ctx.fillRect(x-size/2,c.height/2-size/2,size,size);
+    }
+  });
+}
+
+// UPDATE
+function update(){
+  timeOfDay+=0.002;
+  let speed=player.inCar?0.15:0.05,nx=player.x,ny=player.y;
+  if(keys.w){nx+=Math.cos(player.a)*speed;ny+=Math.sin(player.a)*speed}
+  if(keys.s){nx-=Math.cos(player.a)*speed;ny-=Math.sin(player.a)*speed}
+  if(keys.a&&!player.inCar){nx+=Math.cos(player.a-Math.PI/2)*speed;ny+=Math.sin(player.a-Math.PI/2)*speed}
+  if(keys.d&&!player.inCar){nx+=Math.cos(player.a+Math.PI/2)*speed;ny+=Math.sin(player.a+Math.PI/2)*speed}
+  if(free(nx,ny)){player.x=nx;player.y=ny}
+  monsters.forEach(m=>{
+    let dx=player.x-m.x,dy=player.y-m.y,dist=Math.hypot(dx,dy);
+    if(dist>0.8){m.x+=dx/dist*0.01;m.y+=dy/dist*0.01;}else{player.hp-=0.2;}
+  });
+  monsters=monsters.filter(m=>m.hp>0);
+  if(monsters.length===0){wave++;spawnWave();}
+}
+
+// SHOOT
+onclick=()=>{
+  if(player.ammo<=0)return;
+  player.ammo--;
+  monsters.forEach(m=>{
+    let dx=m.x-player.x,dy=m.y-player.y,dist=Math.hypot(dx,dy),ang=Math.abs(Math.atan2(dy,dx)-player.a);
+    if(dist<6&&ang<0.15)m.hp-=40;
+  });
+}
+
+// LOOP
+function loop(){
+  update();
+  ctx.fillStyle="black";ctx.fillRect(0,0,c.width,c.height);
+  drawWorld();drawSprites(monsters,"red");drawSprites(cars,"blue");
+  hp.textContent=Math.floor(player.hp);
+  ammo.textContent=player.ammo;
+  wave.textContent=wave;
+  time.textContent=Math.sin(timeOfDay)>0?"Day":"Night";
+  mode.textContent=player.inCar?"CAR":"ON FOOT";
+  requestAnimationFrame(loop);
+}
+loop();
+// ===== GAME CODE END =====
+</script>
+</body>
+</html>
